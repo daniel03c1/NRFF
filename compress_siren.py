@@ -198,7 +198,6 @@ if __name__ == '__main__':
 
     """ PREPARING A VIDEO """
     target_frames = load_video(args.video_path, scale=args.video_scale)
-    target_frames = target_frames[:100] # temp
     total_frames = len(target_frames)
     print(target_frames.shape)
 
