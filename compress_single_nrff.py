@@ -27,7 +27,7 @@ parser.add_argument('--tag', type=str, default='temp', help='tag (name)')
 parser.add_argument('--save_path', type=str, default='./')
 
 # model
-parser.add_argument('--width', type=float, default=1) # 32)
+parser.add_argument('--ratio', type=float, default=1)
 parser.add_argument('--hidden_layers', type=int, default=1,
                     help='the number of layers (default: 1)')
 parser.add_argument('--use_amp', action='store_true',
@@ -52,10 +52,10 @@ parser.add_argument('--lr', type=float, default=1e-3,
                     help='learning rate (default: 0.00001)')
 parser.add_argument('--epochs', type=int, default=10000,
                     help='the number of training epochs')
-# parser.add_argument('--flow-warmup-step', type=int, default=2000,
-#                     help='flow only training warmup (default: 2000)')
-# parser.add_argument('--image-warmup-step', type=int, default=5000,
-#                     help='flow only training warmup (default: 5000)')
+parser.add_argument('--flow-warmup-step', type=int, default=2000,
+                    help='flow only training warmup (default: 2000)')
+parser.add_argument('--image-warmup-step', type=int, default=5000,
+                    help='flow only training warmup (default: 5000)')
 
 parser.add_argument('--eval_interval', type=int, default=5000)
 parser.add_argument('--verbose', action='store_true')
@@ -113,11 +113,11 @@ def main(args, target_frames, keyframe, kf_size, kf_idx, metrics,
 
     """ PREPARING A NETWORK """
     # flows
-    # target_flows, target_residuals = get_target_flows_residuals(
-    #     target_frames, keyframe, kf_idx, flow_grid)
+    target_flows, target_residuals = get_target_flows_residuals(
+        target_frames, keyframe, kf_idx, flow_grid)
 
     x = Symbol('x')
-    eq = 3*x**2 + 12*x - args.width*kf_size/2
+    eq = 3*x**2 + 12*x - args.ratio*kf_size/2
     width = int(np.round(float(max(solve(eq)))/2)*2)
 
     net = Siren(in_features=3,
@@ -190,15 +190,14 @@ def main(args, target_frames, keyframe, kf_size, kf_idx, metrics,
                     if i == 0 or i == kf_idx:
                         src_frame = keyframe
                     else:
-                        # if epoch <= args.image_warmup_step:
-                        #     src_frame = target_frames[src]
-                        # else:
-                        src_frame = reconstructed_frame.detach()
+                        if epoch <= args.image_warmup_step:
+                            src_frame = target_frames[src]
+                        else:
+                            src_frame = reconstructed_frame.detach()
                     reconstructed_frame = warp_frames(src_frame, flows, flow_grid) \
                                         + outputs.unsqueeze(0)
                     reconstructed_frame = reconstructed_frame.clamp(0, 1)
 
-                    '''
                     # flows and residuals losses
                     flows_loss = F.mse_loss(
                         flows, target_flows[dst - (not backward)])
@@ -208,9 +207,8 @@ def main(args, target_frames, keyframe, kf_size, kf_idx, metrics,
                     if epoch <= args.flow_warmup_step:
                         loss = flows_loss + residuals_loss
                     else:
-                    '''
-                    loss = F.mse_loss(reconstructed_frame,
-                                     target_frames[dst].unsqueeze(0))
+                        loss = F.mse_loss(reconstructed_frame,
+                                          target_frames[dst].unsqueeze(0))
 
                     if args.use_amp:
                         scaler.scale(loss).backward()
